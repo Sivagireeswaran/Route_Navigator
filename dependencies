@@ -1,0 +1,3 @@
+cd NavigatorApp
+npm install react-native-maps react-native-maps-directions
+npm install dijkstra-pathfinder
