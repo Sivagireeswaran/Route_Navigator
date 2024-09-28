@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Real-Time Map with Dijkstra's Algorithm</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        #map {
+            height: 80vh;
+        }
+        .search-container {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            width: 300px;
+        }
+        .search-input {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s;
+        }
+        .search-input:hover {
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+        .marker-icon {
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+            padding: 5px;
+            font-size: 12px;
+        }
+        .selected {
+            background-color: #ff5722;
+        }
+        .path {
+            color: #ff5722;
+            weight: 5;
+        }
+    </style>
+</head>
+<body>
+    <div class="search-container">
+        <input type="text" id="search" class="search-input" placeholder="Search for locations..." />
+    </div>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map').setView([51.505, -0.09], 13);
+
+        // Add a tile layer to the map
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Location data (mockup)
+        const locations = [
+            { name: "Location A", coords: [51.5, -0.1] },
+            { name: "Location B", coords: [51.51, -0.08] },
+            { name: "Location C", coords: [51.52, -0.06] },
+            { name: "Location D", coords: [51.53, -0.07] },
+            { name: "Location E", coords: [51.54, -0.05] },
+            { name: "Location F", coords: [51.49, -0.09] },
+            { name: "Location G", coords: [51.48, -0.1] }
+        ];
+
+        let sourceMarker = null;
+        let destinationMarker = null;
+
+        function addMarker(e, type) {
+            const marker = L.marker(e.latlng).addTo(map);
+            marker.bindPopup(type === 'source' ? 'Source' : 'Destination').openPopup();
+
+            if (type === 'source') {
+                if (sourceMarker) map.removeLayer(sourceMarker);
+                sourceMarker = marker;
+            } else {
+                if (destinationMarker) map.removeLayer(destinationMarker);
+                destinationMarker = marker;
+            }
+        }
+
+        map.on('click', function(e) {
+            if (!sourceMarker) {
+                addMarker(e, 'source');
+            } else if (!destinationMarker) {
+                addMarker(e, 'destination');
+                calculateShortestPath();
+            }
+        });
+
+        // Search functionality
+        document.getElementById('search').addEventListener('input', function() {
+            const query = this.value.toLowerCase();
+            if (query) {
+                map.eachLayer(function(layer) {
+                    if (layer instanceof L.Marker) {
+                        map.removeLayer(layer);
+                    }
+                });
+
+                const results = locations.filter(location => location.name.toLowerCase().includes(query));
+                results.forEach(location => {
+                    const marker = L.marker(location.coords).addTo(map);
+                    marker.bindPopup(location.name).openPopup();
+                });
+            }
+        });
+
+        // Calculate shortest path using Dijkstra's algorithm
+        function calculateShortestPath() {
+            if (!sourceMarker || !destinationMarker) return;
+
+            const sourceCoords = sourceMarker.getLatLng();
+            const destinationCoords = destinationMarker.getLatLng();
+
+            // Use OpenCage Geocoder API to get the distances between locations
+            const apiKey = 'c9e06fc8babf4040afaa417065dbef5b';
+            const url = `https://api.opencage.com/geocode/v1/json?q=${sourceCoords.lat},${sourceCoords.lng}&key=${apiKey}`;
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    const sourceLocation = data.results[0];
+                    const graph = {};
+
+                    locations.forEach(location => {
+                        const latlng = location.coords;
+                        const url = `https://api.opencage.com/geocode/v1/json?q=${latlng[0]},${latlng[1]}&key=${apiKey}`;
+                        fetch(url)
+                            .then(response => response.json())
+                            .then(data => {
+                                const distance = data.results[0].components.distance.value;
+                                graph[location.name] = { distance };
+                            });
+                    });
+
+                    // Implement Dijkstra's algorithm using the graph
+                    const shortestPath = dijkstra(graph, sourceLocation.components.formatted);
+                    console.log(shortestPath);
+                });
+        }
+
+        // Dijkstra's algorithm implementation
+        function dijkstra(graph, start) {
+            const distances = {};
+            const previous = {};
+            const queue = [];
+
+            for (const node in graph) {
+                distances[node] = Infinity;
+                previous[node] = null;
+            }
+
+            distances[start] = 0;
+            queue.push(start);
+
+            while (queue.length > 0) {
+                const currentNode = queue.shift();
+                for (const neighbor in graph[currentNode]) {
+                    const distance = distances[currentNode] + graph[currentNode][neighbor].distance;
+                    if (distance < distances[neighbor]) {
+                        distances[neighbor] = distance;
+                        previous[neighbor] = currentNode;
+                    }
+                }
+            }
+
+            return distances;
+        }
+    </script>
+</body>
+</html>
